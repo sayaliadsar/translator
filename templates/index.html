@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translator - Learn English & Marathi</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+    <div class="bg"></div>
+    <div class="container">
+        <header>
+            <h1><i class="fa-solid fa-language"></i> Translator</h1>
+            <p>Learn English & Marathi with Simple Translator...</p>
+            <button id="startBtn" class="start-btn">Start <i class="fa-solid fa-arrow-right"></i></button>
+        </header>
+
+        <main id="app" class="hidden">
+            <div class="lang-switch">
+                <span id="fromLang">Marathi</span>
+                <button id="swapBtn" title="Swap"><i class="fa-solid fa-right-left"></i></button>
+                <span id="toLang">English</span>
+            </div>
+
+            <div class="box">
+                <textarea id="inputText" placeholder="Type here..."></textarea>
+                <div class="input-btns">
+                    <button id="micBtn" title="Voice"><i class="fa-solid fa-microphone"></i> Voice</button>
+                    <button id="clearInput" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+                </div>
+                <p id="voiceStatus"></p>
+            </div>
+
+            <button id="translateBtn" class="translate-btn"><i class="fa-solid fa-wand-magic-sparkles"></i> Translate</button>
+
+            <div class="box output-box">
+                <p id="outputText">Translation will appear here...</p>
+                <div class="output-btns">
+                    <button onclick="speakText()" title="Listen"><i class="fa-solid fa-volume-high"></i></button>
+                    <button onclick="copyText()" title="Copy"><i class="fa-solid fa-copy"></i></button>
+                </div>
+            </div>
+        </main>
+
+        <aside class="history">
+            <div class="history-head">
+                <h3><i class="fa-solid fa-clock-rotate-left"></i> History</h3>
+                <button onclick="clearHistory()" title="Clear All"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <ul id="historyList"></ul>
+        </aside>
+    </div>
+
+<script>
+let from = 'mr', to = 'en';  // mr=marathi, en=english
+let history = JSON.parse(localStorage.getItem('transHistory')) || [];
+
+document.getElementById('startBtn').onclick = () => {
+    document.querySelector('header').classList.add('slide-up');
+    document.getElementById('app').classList.remove('hidden');
+    setTimeout(()=> document.getElementById('app').classList.add('show'), 100);
+}
+renderHistory();
+
+document.getElementById('swapBtn').onclick = () => {
+    [from, to] = [to, from];
+    document.getElementById('fromLang').innerText = from==='mr'?'Marathi':'English';
+    document.getElementById('toLang').innerText = to==='mr'?'Marathi':'English';
+    document.getElementById('inputText').value = document.getElementById('outputText').innerText;
+    document.getElementById('outputText').innerText = 'Translation will appear here...';
+}
+
+document.getElementById('clearInput').onclick = () => {
+    document.getElementById('inputText').value = '';
+    document.getElementById('voiceStatus').innerText = '';
+}
+
+document.getElementById('translateBtn').onclick = translateText;
+document.getElementById('micBtn').onclick = startListening;
+
+async function translateText() {
+    const text = document.getElementById('inputText').value;
+    if(!text) return;
+    document.getElementById('translateBtn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Translating...';
+    
+    const res = await fetch('/translate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, src: from, dest: to})
+    });
+    const data = await res.json();
+    document.getElementById('outputText').innerText = data.translated;
+    document.getElementById('translateBtn').innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Translate';
+    saveHistory(text, data.translated);
+}
+
+function startListening() {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = from==='mr' ? 'mr-IN' : 'en-US';
+    recognition.start();
+    document.getElementById('voiceStatus').innerText = 'Listening...';
+    document.getElementById('micBtn').classList.add('recording');
+
+    recognition.onresult = async (e) => {
+        const text = e.results[0][0].transcript;
+        document.getElementById('inputText').value = text;
+        document.getElementById('voiceStatus').innerText = 'You said: ' + text;
+        document.getElementById('micBtn').classList.remove('recording');
+        await translateText();
+    };
+    recognition.onerror = () => {
+        document.getElementById('voiceStatus').innerText = 'Try again';
+        document.getElementById('micBtn').classList.remove('recording');
+    }
+}
+
+function speakText() {
+    const text = document.getElementById('outputText').innerText;
+    if(!text || text.includes('...')) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = to==='mr' ? 'mr-IN' : 'en-US';
+    speechSynthesis.speak(utter);
+}
+
+function copyText() {
+    const text = document.getElementById('outputText').innerText;
+    navigator.clipboard.writeText(text);
+    alert('Copied!');
+}
+
+// HISTORY
+function saveHistory(inp, out) {
+    history.unshift({inp, out, from, to, time: new Date().toLocaleTimeString()});
+    if(history.length > 20) history.pop();
+    localStorage.setItem('transHistory', JSON.stringify(history));
+    renderHistory();
+}
+function renderHistory() {
+    const list = document.getElementById('historyList');
+    list.innerHTML = '';
+    history.forEach((h, i) => {
+        list.innerHTML += `<li>
+            <div><b>${h.from==='mr'?'MR':'EN'}:</b> ${h.inp}</div>
+            <div><b>${h.to==='mr'?'MR':'EN'}:</b> ${h.out}</div>
+            <div class="h-btns">
+                <button onclick="useHistory(${i})" title="Use"><i class="fa-solid fa-rotate-left"></i></button>
+                <button onclick="copyHistory(${i})" title="Copy"><i class="fa-solid fa-copy"></i></button>
+                <button onclick="deleteItem(${i})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </li>`;
+    });
+}
+function useHistory(i) {
+    document.getElementById('inputText').value = history[i].inp;
+    document.getElementById('outputText').innerText = history[i].out;
+}
+function copyHistory(i) {
+    navigator.clipboard.writeText(history[i].out);
+    alert('Copied!');
+}
+function deleteItem(i) {
+    history.splice(i,1);
+    localStorage.setItem('transHistory', JSON.stringify(history));
+    renderHistory();
+}
+function clearHistory() {
+    if(confirm('Clear all history?')) {
+        history = [];
+        localStorage.removeItem('transHistory');
+        renderHistory();
+    }
+}
+</script>
+</body>
+</html>
